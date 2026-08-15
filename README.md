@@ -1,4 +1,4 @@
-# 👗 StyleMatch AI
+# 🧢👟👖🎧🧋 StyleMatch AI
 
 ### AI-Powered Personal Fashion Recommendation Platform
 
