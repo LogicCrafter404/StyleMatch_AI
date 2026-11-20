@@ -37,6 +37,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-white/5 text-center text-white/30 text-xs">
         &copy; {new Date().getFullYear()} StyleMatch AI. All rights reserved.
       </div>
+      <div className="max-w-7xl mx-auto mt-4 text-center text-white/30 text-xs">Made by  <span className="text-white/80 font-medium">Arghya Chakraborty</span> <span>&amp;</span> <span className="text-white/80 font-medium">Sreyashi Choudhury</span> with <span className="inline-block animate-pulse text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.9)]">💜</span>.</div>
     </footer>
   );
 }

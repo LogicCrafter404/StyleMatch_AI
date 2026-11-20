@@ -35,22 +35,19 @@ export default function Navbar() {
               <a 
                 key={link.label} 
                 href={link.href} 
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  link.active 
-                    ? 'bg-purple-600 text-white font-semibold shadow-[0_0_15px_rgba(168,85,247,0.7)]' 
-                    : 'hover:text-white hover:bg-white/10'
-                }`}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all text-white/70 hover:text-white hover:bg-white/10"
               >
                 {link.label}
               </a>
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-xs font-medium text-white/80 hover:text-white px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors flex items-center gap-2">
+            {/* Swapped Login for a beautiful Sign Up button */}
+            <Link to="/signup" className="text-xs font-medium text-white/80 hover:text-white px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-purple-900/80 border border-purple-400/40 flex items-center justify-center text-purple-200">
                 <User className="w-3.5 h-3.5" />
               </div>
-              <span>Log in</span>
+              <span>Sign Up</span>
             </Link>
             <Link to="/get-started">
               <Button size="sm" className="bg-gradient-to-r from-purple-600 to-violet-600 shadow-[0_0_20px_rgba(168,85,247,0.6)]">
@@ -89,7 +86,7 @@ export default function Navbar() {
               </a>
             ))}
             <div className="flex flex-col items-center gap-6 mt-8">
-              <Link to="/login" onClick={() => setIsOpen(false)} className="text-lg text-white/80">Log in</Link>
+              <Link to="/signup" onClick={() => setIsOpen(false)} className="text-lg text-white/80">Sign Up</Link>
               <Link to="/get-started" onClick={() => setIsOpen(false)}>
                 <Button size="lg">Get Started</Button>
               </Link>

@@ -1,10 +1,6 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
+// frontend/src/App.tsx
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 
@@ -21,7 +17,26 @@ import AIStylistPage from './pages/AIStylistPage';
 import StyleProfilePage from './pages/StyleProfilePage';
 import SavedOutfitsPage from './pages/SavedOutfitsPage';
 import TravelModePage from './pages/TravelModePage';
+import InspirationMatcherPage from './pages/InspirationMatcherPage'; // Added Inspo Matcher Page
 import AuthPage from './pages/AuthPage';
+
+// 1. UPDATED PROTECTED ROUTE: Checks both session and local storage
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+// 2. UPDATED PUBLIC ROUTE: Checks both session and local storage
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+  if (token) {
+    return <Navigate to="/app" replace />;
+  }
+  return <>{children}</>;
+}
 
 function GlobalLoader({ onComplete }: { onComplete: () => void; key?: string }) {
   const [progress, setProgress] = useState(0);
@@ -38,7 +53,7 @@ function GlobalLoader({ onComplete }: { onComplete: () => void; key?: string }) 
       
       if (currentStep >= steps) {
         clearInterval(timer);
-        setTimeout(onComplete, 200); // Slight delay after 100%
+        setTimeout(onComplete, 200);
       }
     }, interval);
 
@@ -116,15 +131,19 @@ function AppRoutes() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/get-started" element={<GetStartedPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="/login" element={<AuthPage mode="login" />} />
-          <Route path="/signup" element={<AuthPage mode="signup" />} />
           
-          <Route path="/app" element={<DashboardLayout />}>
+          {/* Public Only routes (Redirect to /app if already logged in) */}
+          <Route path="/login" element={<PublicRoute><AuthPage mode="login" /></PublicRoute>} />
+          <Route path="/signup" element={<PublicRoute><AuthPage mode="signup" /></PublicRoute>} />
+          
+          {/* Protected routes (Redirect to /login if no token) */}
+          <Route path="/app" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
             <Route index element={<DashboardPage />} />
             <Route path="wardrobe" element={<WardrobePage />} />
             <Route path="wardrobe/add" element={<AddClothingPage />} />
             <Route path="outfits/generate" element={<GenerateOutfitPage />} />
             <Route path="stylist" element={<AIStylistPage />} />
+            <Route path="inspo-match" element={<InspirationMatcherPage />} />
             <Route path="style" element={<StyleProfilePage />} />
             <Route path="outfits" element={<SavedOutfitsPage />} />
             <Route path="travel" element={<TravelModePage />} />
@@ -153,7 +172,6 @@ export default function App() {
               transition={{ duration: 0.8 }}
               className="min-h-screen flex flex-col relative"
             >
-              {/* Optional: Add a subtle global background grain or gradient here */}
               <div className="fixed inset-0 pointer-events-none z-[-1] bg-mesh opacity-40"></div>
               <AppRoutes />
             </motion.div>
@@ -163,4 +181,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-

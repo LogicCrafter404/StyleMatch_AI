@@ -1,62 +1,195 @@
-import { useState, MouseEvent } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Heart, Search, Filter, X, Wand2, Tag, Calendar, Layers, Check } from 'lucide-react';
+import { useState, useEffect, MouseEvent } from 'react';
+import { motion, AnimatePresence, Variants } from 'motion/react';
+import { Sparkles, Heart, Search, X, Wand2, Loader2, Pencil, Trash2, Save } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const DEMO_ITEMS = [
-  { id: 1, name: 'Blue Denim Jacket', category: 'Jackets', color: 'Blue', season: 'Spring', favorite: true, wearCount: 18, brand: 'Acne Studios', fabric: '100% Organic Cotton Denim', image: 'https://images.unsplash.com/photo-1551028719-01c1eb56211d?auto=format&fit=crop&q=80&w=400&h=500' },
-  { id: 2, name: 'White Oversized T-Shirt', category: 'Tops', color: 'White', season: 'Summer', favorite: false, wearCount: 24, brand: 'COS', fabric: 'Heavyweight Cotton', image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=400&h=500' },
-  { id: 3, name: 'Black Cargo Pants', category: 'Bottoms', color: 'Black', season: 'All', favorite: true, wearCount: 15, brand: 'Carhartt WIP', fabric: 'Ripstop Cotton', image: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&q=80&w=400&h=500' },
-  { id: 4, name: 'White Leather Sneakers', category: 'Shoes', color: 'White', season: 'All', favorite: true, wearCount: 32, brand: 'Common Projects', fabric: 'Nappa Leather', image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614c3a?auto=format&fit=crop&q=80&w=400&h=500' },
-  { id: 5, name: 'Grey Fleece Hoodie', category: 'Tops', color: 'Grey', season: 'Winter', favorite: false, wearCount: 12, brand: 'Reigning Champ', fabric: 'French Terry', image: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&q=80&w=400&h=500' },
-  { id: 6, name: 'Beige Tapered Chinos', category: 'Bottoms', color: 'Beige', season: 'Summer', favorite: false, wearCount: 9, brand: 'Uniqlo U', fabric: 'Stretch Cotton Twill', image: 'https://images.unsplash.com/photo-1624378441864-6eda7eac51cb?auto=format&fit=crop&q=80&w=400&h=500' },
-];
+interface ClothingItem {
+  id: string;
+  name: string;
+  category: string;
+  subcategory: string;
+  color: string;
+  brand: string;
+  style_tag: string;
+  image_url: string;
+  wears_count: number;
+  is_favorite: boolean;
+}
 
-const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Jackets', 'Shoes', 'Accessories'];
+const CATEGORIES = ['All', 'Tops', 'Bottoms', 'Outerwear', 'Shoes', 'Accessories', 'Dresses'];
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.9, y: 20 },
+  show: { opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 200, damping: 20 } },
+  exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } }
+};
 
 export default function WardrobePage() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
-  const [selectedItem, setSelectedItem] = useState<typeof DEMO_ITEMS[0] | null>(null);
-  const [items, setItems] = useState(DEMO_ITEMS);
+  const [selectedItem, setSelectedItem] = useState<ClothingItem | null>(null);
+  const [items, setItems] = useState<ClothingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  const toggleFavorite = (id: number, e: MouseEvent) => {
+  // Edit/Delete operational states
+  const [isEditingModal, setIsEditingModal] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<ClothingItem>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchWardrobe = async () => {
+    const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/wardrobe', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data);
+      }
+    } catch (e) {
+      console.error("Failed to load wardrobe", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWardrobe();
+  }, []);
+
+  const toggleFavorite = async (id: string, e: MouseEvent) => {
     e.stopPropagation();
-    setItems(prev => prev.map(item => item.id === id ? { ...item, favorite: !item.favorite } : item));
-    if (selectedItem && selectedItem.id === id) {
-      setSelectedItem(prev => prev ? { ...prev, favorite: !prev.favorite } : null);
+    const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/wardrobe/${id}/favorite`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setItems(prev => prev.map(item => item.id === id ? { ...item, is_favorite: !item.is_favorite } : item));
+        if (selectedItem && selectedItem.id === id) {
+          setSelectedItem(prev => prev ? { ...prev, is_favorite: !prev.is_favorite } : null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to toggle favorite on Supabase", err);
+    }
+  };
+
+  // 1. DELETE ITEM HANDLER
+  const handleDeleteItem = async (id: string) => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this item from your digital wardrobe?");
+    if (!confirmDelete) return;
+
+    setIsDeleting(true);
+    const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/wardrobe/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        setItems(prev => prev.filter(item => item.id !== id));
+        setSelectedItem(null); // Close modal
+      } else {
+        alert('Failed to delete the clothing item.');
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 2. INIT EDIT FORM HANDLER
+  const handleStartEdit = () => {
+    if (!selectedItem) return;
+    setEditForm({ ...selectedItem });
+    setIsEditingModal(true);
+  };
+
+  // 3. SAVE EDIT HANDLER
+  const handleSaveEdit = async () => {
+    if (!selectedItem || !editForm.id) return;
+    setIsSavingEdit(true);
+
+    const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/wardrobe/${editForm.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editForm.name,
+          category: editForm.category,
+          subcategory: editForm.subcategory,
+          color: editForm.color,
+          style_tag: editForm.style_tag,
+          brand: editForm.brand,
+          image_url: editForm.image_url
+        })
+      });
+
+      if (res.ok) {
+        const updatedItem = await res.json();
+        // Update both local list and modal preview state
+        setItems(prev => prev.map(item => item.id === editForm.id ? updatedItem : item));
+        setSelectedItem(updatedItem);
+        setIsEditingModal(false);
+      } else {
+        alert('Failed to save edited details.');
+      }
+    } catch (e) {
+      console.error("Edit save failed", e);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
   const filteredItems = items.filter(item => {
     const matchCategory = activeCategory === 'All' || item.category === activeCategory;
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
+                        (item.brand && item.brand.toLowerCase().includes(search.toLowerCase())) ||
+                        (item.color && item.color.toLowerCase().includes(search.toLowerCase()));
     return matchCategory && matchSearch;
   });
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.08
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, scale: 0.9, y: 20 },
-    show: { opacity: 1, scale: 1, y: 0, transition: { type: 'spring', stiffness: 200, damping: 20 } },
-    exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } }
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 text-violet-primary animate-spin" />
+        <p className="text-white/40 text-sm uppercase tracking-wider">Syncing your closet with Supabase...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col h-full">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
         <div>
           <h1 className="text-3xl md:text-5xl font-display font-medium text-white/90 mb-2">My Wardrobe</h1>
-          <p className="text-white/60">6 scanned items · AI style matrix ready</p>
+          <p className="text-white/60">{items.length} scanned items · AI style matrix ready</p>
         </div>
         
         <div className="flex items-center gap-4">
@@ -120,12 +253,15 @@ export default function WardrobePage() {
               animate="show"
               exit="exit"
               key={item.id}
-              onClick={() => setSelectedItem(item)}
+              onClick={() => {
+                setIsEditingModal(false); // Reset edit view on select
+                setSelectedItem(item);
+              }}
               className="group relative rounded-2xl overflow-hidden glass-panel border border-white/10 hover:border-violet-primary/60 hover:shadow-[0_0_35px_-5px_rgba(138,43,226,0.3)] transition transform-gpu duration-300 cursor-pointer"
             >
               <div className="aspect-[4/5] overflow-hidden bg-charcoal-light relative">
                 <img 
-                  src={item.image} 
+                  src={item.image_url} 
                   alt={item.name}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100"
@@ -135,7 +271,7 @@ export default function WardrobePage() {
                     onClick={(e) => toggleFavorite(item.id, e)}
                     className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white/70 hover:text-red-400 border border-white/10 transition"
                   >
-                    <Heart className={`w-4 h-4 ${item.favorite ? 'fill-red-500 text-red-500' : ''}`} />
+                    <Heart className={`w-4 h-4 ${item.is_favorite ? 'fill-red-500 text-red-500' : ''}`} />
                   </button>
                 </div>
                 {/* AI Badge */}
@@ -148,9 +284,9 @@ export default function WardrobePage() {
               <div className="p-4 relative">
                 <h3 className="font-medium text-sm text-white/90 truncate">{item.name}</h3>
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-white/50 font-medium">{item.category} · {item.brand}</span>
+                  <span className="text-xs text-white/50 font-medium">{item.category} {item.brand ? `· ${item.brand}` : ''}</span>
                   <div className="flex items-center gap-1 text-[11px] text-violet-light">
-                    <span>{item.wearCount} wears</span>
+                    <span>{item.wears_count} wears</span>
                   </div>
                 </div>
               </div>
@@ -194,7 +330,10 @@ export default function WardrobePage() {
               className="glass-card rounded-3xl border border-white/20 max-w-2xl w-full overflow-hidden relative shadow-[0_0_50px_rgba(138,43,226,0.3)]"
             >
               <button 
-                onClick={() => setSelectedItem(null)}
+                onClick={() => {
+                  setSelectedItem(null);
+                  setIsEditingModal(false);
+                }}
                 className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white/70 hover:text-white"
               >
                 <X className="w-5 h-5" />
@@ -202,55 +341,162 @@ export default function WardrobePage() {
 
               <div className="flex flex-col sm:flex-row">
                 <div className="w-full sm:w-1/2 h-72 sm:h-auto relative bg-charcoal">
-                  <img src={selectedItem.image} alt={selectedItem.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  <img src={selectedItem.image_url} alt={selectedItem.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                   <div className="absolute top-4 left-4 px-2.5 py-1 rounded-full bg-violet-primary/80 text-white font-bold text-xs">
                     {selectedItem.category}
                   </div>
                 </div>
 
                 <div className="w-full sm:w-1/2 p-6 flex flex-col justify-between gap-4">
-                  <div>
-                    <div className="text-xs text-violet-light font-bold uppercase tracking-wider mb-1">{selectedItem.brand}</div>
-                    <h2 className="text-2xl font-display font-medium text-white mb-3">{selectedItem.name}</h2>
-                    
-                    <div className="space-y-2 text-xs text-white/70">
-                      <div className="flex justify-between border-b border-white/10 pb-2">
-                        <span>Color</span>
-                        <span className="text-white font-medium">{selectedItem.color}</span>
+                  
+                  {isEditingModal ? (
+                    /* DYNAMIC EDIT INTERFACE PANEL */
+                    <div className="space-y-4 text-sm flex-1 flex flex-col justify-center">
+                      <h3 className="text-lg font-display font-medium text-white border-b border-white/10 pb-2">Edit Garment Details</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-white/40 mb-1 ml-1">Clothing Name</label>
+                          <input 
+                            type="text" 
+                            value={editForm.name || ''} 
+                            onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                            className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-violet-primary"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-white/40 mb-1 ml-1">Category</label>
+                            <select 
+                              value={editForm.category || 'Tops'} 
+                              onChange={(e) => setEditForm({...editForm, category: e.target.value})}
+                              className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-violet-primary"
+                            >
+                              <option value="Tops">Tops</option>
+                              <option value="Bottoms">Bottoms</option>
+                              <option value="Outerwear">Outerwear</option>
+                              <option value="Shoes">Shoes</option>
+                              <option value="Accessories">Accessories</option>
+                              <option value="Dresses">Dresses</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-white/40 mb-1 ml-1">Brand</label>
+                            <input 
+                              type="text" 
+                              value={editForm.brand || ''} 
+                              onChange={(e) => setEditForm({...editForm, brand: e.target.value})}
+                              className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-violet-primary"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-white/40 mb-1 ml-1">Color</label>
+                            <input 
+                              type="text" 
+                              value={editForm.color || ''} 
+                              onChange={(e) => setEditForm({...editForm, color: e.target.value})}
+                              className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-violet-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-white/40 mb-1 ml-1">Style Tag</label>
+                            <select 
+                              value={editForm.style_tag || 'Casual'} 
+                              onChange={(e) => setEditForm({...editForm, style_tag: e.target.value})}
+                              className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-violet-primary"
+                            >
+                              {['Casual', 'Minimal', 'Streetwear', 'Formal', 'Sporty', 'Vintage', 'Elegant'].map(tag => (
+                                <option key={tag} value={tag}>{tag}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between border-b border-white/10 pb-2">
-                        <span>Fabric</span>
-                        <span className="text-white font-medium">{selectedItem.fabric}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-white/10 pb-2">
-                        <span>Season</span>
-                        <span className="text-white font-medium">{selectedItem.season}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-white/10 pb-2">
-                        <span>Wear Stats</span>
-                        <span className="text-violet-light font-semibold">{selectedItem.wearCount} times worn</span>
+                      
+                      <div className="flex gap-2 pt-4 border-t border-white/10">
+                        <button 
+                          type="button" 
+                          onClick={() => setIsEditingModal(false)}
+                          className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white/60 hover:text-white transition"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleSaveEdit}
+                          disabled={isSavingEdit}
+                          className="flex-1 py-2.5 rounded-xl bg-violet-primary hover:bg-violet-light text-white text-xs font-semibold shadow-md flex items-center justify-center gap-1.5 transition"
+                        >
+                          {isSavingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          Save Changes
+                        </button>
                       </div>
                     </div>
+                  ) : (
+                    /* STATIC DETAILS DISPLAY PANEL (Original Display) */
+                    <>
+                      <div>
+                        <div className="text-xs text-violet-light font-bold uppercase tracking-wider mb-1">{selectedItem.brand || 'No Brand Listed'}</div>
+                        <h2 className="text-2xl font-display font-medium text-white mb-3">{selectedItem.name}</h2>
+                        
+                        <div className="space-y-2 text-xs text-white/70">
+                          <div className="flex justify-between border-b border-white/10 pb-2">
+                            <span>Color</span>
+                            <span className="text-white font-medium">{selectedItem.color}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/10 pb-2">
+                            <span>Subcategory</span>
+                            <span className="text-white font-medium">{selectedItem.subcategory || 'None'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/10 pb-2">
+                            <span>Style Tag</span>
+                            <span className="text-white font-medium">{selectedItem.style_tag || 'Casual'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-white/10 pb-2">
+                            <span>Wear Stats</span>
+                            <span className="text-violet-light font-semibold">{selectedItem.wears_count} times worn</span>
+                          </div>
+                        </div>
 
-                    <div className="mt-4 p-3 rounded-xl bg-violet-primary/15 border border-violet-primary/30 text-xs leading-relaxed text-white/90">
-                      <div className="font-bold text-violet-light flex items-center gap-1 mb-1">
-                        <Sparkles className="w-3.5 h-3.5" /> AI Styling Insight
+                        <div className="mt-4 p-3 rounded-xl bg-violet-primary/15 border border-violet-primary/30 text-xs leading-relaxed text-white/90">
+                          <div className="font-bold text-violet-light flex items-center gap-1 mb-1">
+                            <Sparkles className="w-3.5 h-3.5" /> AI Styling Insight
+                          </div>
+                          A highly versatile {selectedItem.style_tag.toLowerCase()} piece! Pairs dynamically with neutral items.
+                        </div>
                       </div>
-                      Versatile piece! Combines best with dark bottoms and layered outerwear.
-                    </div>
-                  </div>
 
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setSelectedItem(null);
-                        navigate('/app/outfits/generate');
-                      }}
-                      className="flex-1 py-3 rounded-xl bg-violet-primary hover:bg-violet-light text-white font-medium text-xs flex items-center justify-center gap-1.5 transition shadow-[0_0_20px_rgba(138,43,226,0.4)]"
-                    >
-                      <Wand2 className="w-4 h-4" /> Style This Piece
-                    </button>
-                  </div>
+                      {/* Dynamic Action Buttons Grid */}
+                      <div className="flex flex-col gap-2">
+                        <button 
+                          onClick={() => {
+                            setSelectedItem(null);
+                            navigate('/app/outfits/generate');
+                          }}
+                          className="w-full py-3 rounded-xl bg-violet-primary hover:bg-violet-light text-white font-medium text-xs flex items-center justify-center gap-1.5 transition shadow-[0_0_20px_rgba(138,43,226,0.4)] animate-fade-in"
+                        >
+                          <Wand2 className="w-4 h-4" /> Style This Piece
+                        </button>
+                        
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleStartEdit}
+                            className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white font-medium text-xs flex items-center justify-center gap-1.5 transition"
+                          >
+                            <Pencil className="w-4 h-4" /> Edit Details
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteItem(selectedItem.id)}
+                            disabled={isDeleting}
+                            className="flex-1 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 font-medium text-xs flex items-center justify-center gap-1.5 transition"
+                          >
+                            {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Delete Piece
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>

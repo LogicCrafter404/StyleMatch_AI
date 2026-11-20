@@ -1,39 +1,82 @@
 import { useState } from 'react';
 import React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Variants } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight } from 'lucide-react';
 import Button from '../components/ui/Button';
 import InteractiveBackground from '../components/ui/InteractiveBackground';
 
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.15
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, x: -20 },
+  show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 200, damping: 20 } }
+};
+
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
 
-  // Selections
+  // Onboarding Selections
+  const [gender, setGender] = useState<'Male' | 'Female'>('Male');
   const [styles, setStyles] = useState<string[]>([]);
   const [occasions, setOccasions] = useState<string[]>([]);
   const [colors, setColors] = useState<string[]>([]);
   const [avoidColors, setAvoidColors] = useState<string[]>([]);
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const nextStep = () => {
     if (step < totalSteps) setStep(step + 1);
   };
 
-  const finishOnboarding = () => {
-    // OPTIMIZATION: Temporarily store onboarding preferences in localStorage 
-    // so they are not lost when the user is redirected to create an account.
+  const finishOnboarding = async () => {
     const onboardingPreferences = {
+      gender,
       styles,
       occasions,
       colors,
       avoidColors
     };
-    localStorage.setItem('stylematch_onboarding', JSON.stringify(onboardingPreferences));
 
-    // Redirect to the Sign Up screen instead of entering the dashboard directly
+    const token = sessionStorage.getItem('stylematch_token');
+    
+    // If the user is already logged in, write onboarding straight to Supabase
+    if (token) {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/preferences', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            gender: gender,
+            styles: styles,
+            occasions: occasions,
+            preferred_colors: colors,
+            avoided_colors: avoidColors
+          })
+        });
+        if (res.ok) {
+          navigate('/app');
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to save onboarding directly to database", err);
+      }
+    }
+
+    // Otherwise, temporarily store locally as guest in sessionStorage and redirect to signup
+    sessionStorage.setItem('stylematch_onboarding', JSON.stringify(onboardingPreferences));
     navigate('/signup'); 
   };
 
@@ -70,7 +113,22 @@ export default function OnboardingPage() {
       <div className="relative z-10 w-full max-w-xl">
         <AnimatePresence mode="wait">
           {step === 1 && (
-            <StepContent key="1" title="STEP 01 — YOUR STYLE" question="How would you describe your style?">
+            <StepContent key="1" title="STEP 01 — YOUR GENDER" question="Identify your preference:">
+              <div className="grid grid-cols-2 gap-4">
+                {['Male', 'Female'].map(g => (
+                  <SelectCard 
+                    key={g} 
+                    label={g} 
+                    selected={gender === g} 
+                    onClick={() => setGender(g as 'Male' | 'Female')} 
+                  />
+                ))}
+              </div>
+            </StepContent>
+          )}
+
+          {step === 2 && (
+            <StepContent key="2" title="STEP 02 — YOUR STYLE" question="How would you describe your style?">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {['Casual', 'Minimal', 'Streetwear', 'Formal', 'Sporty', 'Vintage', 'Elegant'].map(s => (
                   <SelectCard 
@@ -84,8 +142,8 @@ export default function OnboardingPage() {
             </StepContent>
           )}
 
-          {step === 2 && (
-            <StepContent key="2" title="STEP 02 — YOUR OCCASIONS" question="Where do you dress for most?">
+          {step === 3 && (
+            <StepContent key="3" title="STEP 03 — YOUR OCCASIONS" question="Where do you dress for most?">
               <div className="grid grid-cols-2 gap-4">
                 {['College', 'Office', 'Daily Life', 'Party', 'Gym', 'Travel'].map(o => (
                   <SelectCard 
@@ -99,8 +157,8 @@ export default function OnboardingPage() {
             </StepContent>
           )}
 
-          {step === 3 && (
-            <StepContent key="3" title="STEP 03 — YOUR COLORS" question="What colors do you love wearing?">
+          {step === 4 && (
+            <StepContent key="4" title="STEP 04 — YOUR COLORS" question="What colors do you love wearing?">
               <div className="flex flex-wrap gap-4 justify-center">
                 {[
                   { name: 'Black', hex: '#000' },
@@ -123,8 +181,8 @@ export default function OnboardingPage() {
             </StepContent>
           )}
 
-          {step === 4 && (
-            <StepContent key="4" title="STEP 04 — COLORS TO AVOID" question="Anything you don't like wearing?">
+          {step === 5 && (
+            <StepContent key="5" title="STEP 05 — COLORS TO AVOID" question="Anything you don't like wearing?">
               <p className="text-white/40 text-sm mb-6 text-center">We'll keep these out of your recommendations.</p>
               <div className="flex flex-wrap gap-4 justify-center">
                 {[
@@ -146,8 +204,8 @@ export default function OnboardingPage() {
             </StepContent>
           )}
 
-          {step === 5 && (
-            <StepContent key="5" title="STEP 05 — BUILD YOUR WARDROBE" question="Ready to bring your wardrobe into StyleMatch?">
+          {step === 6 && (
+            <StepContent key="6" title="STEP 06 — BUILD WARDROBE" question="Ready to bring your wardrobe into StyleMatch?">
               <div className="flex flex-col gap-4 mt-8">
                 <Button size="lg" className="w-full" onClick={finishOnboarding} icon={<ArrowRight className="w-5 h-5"/>}>
                   Explore Demo Wardrobe
@@ -161,7 +219,7 @@ export default function OnboardingPage() {
         </AnimatePresence>
 
         {/* Bottom Actions */}
-        {step < 5 && (
+        {step < 6 && (
           <motion.div 
             className="mt-12 flex justify-center"
             initial={{ opacity: 0 }}
@@ -205,7 +263,7 @@ function SelectCard({ label, selected, onClick }: { label: string, selected: boo
       className={`relative p-4 rounded-xl border text-center transition transform-gpu duration-300 ${
         selected 
           ? 'bg-violet-primary/20 border-violet-primary text-white box-glow' 
-          : 'bg-charcoal border-white/10 text-white/60 hover:border-white/30 hover:text-white'
+          : 'bg-charcoal border-white/10 text-white/60 hover:text-white'
       }`}
     >
       {selected && (

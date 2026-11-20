@@ -1,43 +1,139 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Upload, Camera, ImageIcon, ScanLine, Check, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence, Variants } from 'motion/react';
+import { Upload, Camera, ImageIcon, ScanLine, Check, ArrowRight, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Button from '../components/ui/Button';
 
+interface ScannedAttributes {
+  name: string;
+  category: string;
+  subcategory: string;
+  color: string;
+  style_tag: string;
+  image_url: string;
+}
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, x: -10 },
+  show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 200, damping: 20 } }
+};
+
 export default function AddClothingPage() {
+  const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  
   const [scanning, setScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
+  const [scannedData, setScannedData] = useState<ScannedAttributes | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 200, damping: 20 } }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       setPreview(URL.createObjectURL(selectedFile));
-      // Simulate scan
-      setTimeout(() => {
-        setScanning(true);
-        setTimeout(() => {
-          setScanning(false);
-          setScanComplete(true);
-        }, 3000);
-      }, 500);
+      setScanning(true);
+
+      // FIXED: Fallback checks both sessionStorage and localStorage to prevent 401 errors
+      const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+      const base_url = 'http://127.0.0.1:8000';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const uploadRes = await fetch(`${base_url}/api/wardrobe/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!uploadRes.ok) throw new Error('Failed to upload.');
+        const uploadData = await uploadRes.json();
+        const uploadedUrl = uploadData.image_url;
+
+        const scanRes = await fetch(`${base_url}/api/wardrobe/scan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ image_url: uploadedUrl })
+        });
+
+        if (!scanRes.ok) throw new Error('Scan failed.');
+        const scanData = await scanRes.json();
+
+        setScannedData({
+          name: scanData.name,
+          category: scanData.category,
+          subcategory: scanData.subcategory || '',
+          color: scanData.color || '',
+          style_tag: scanData.style_tag || 'Casual',
+          image_url: uploadedUrl
+        });
+
+        setScanning(false);
+        setScanComplete(true);
+
+      } catch (err) {
+        console.error(err);
+        setScanning(false);
+        setPreview(null);
+        alert('Scanner failed to analyze image. Please ensure you are logged in.');
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    if (!scannedData) return;
+    setIsSaving(true);
+
+    // FIXED: Fallback checks both sessionStorage and localStorage to prevent 401 errors
+    const token = sessionStorage.getItem('stylematch_token') || localStorage.getItem('stylematch_token');
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/wardrobe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: scannedData.name,
+          category: scannedData.category,
+          subcategory: scannedData.subcategory,
+          color: scannedData.color,
+          style_tag: scannedData.style_tag,
+          image_url: scannedData.image_url,
+          brand: ""  // FIXED: Explicitly send brand key to satisfy Pydantic validators
+        })
+      });
+
+      if (res.ok) {
+        navigate('/app/wardrobe');
+      } else {
+        alert('Failed to save clothing item to your wardrobe.');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -87,11 +183,9 @@ export default function AddClothingPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="flex-1 flex flex-col md:flex-row gap-8 items-center md:items-start justify-center"
             >
-              {/* Image Container with Scanner */}
               <div className="relative w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
                 <img src={preview} alt="Upload preview" className="w-full h-full object-cover" />
                 
-                {/* Scanner overlay */}
                 {scanning && (
                   <>
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
@@ -103,7 +197,7 @@ export default function AddClothingPage() {
                     <div className="absolute inset-0 flex items-center justify-center z-10">
                       <div className="flex flex-col items-center">
                         <ScanLine className="w-10 h-10 text-violet-primary mb-4 animate-pulse" />
-                        <span className="text-sm font-display tracking-widest text-violet-light bg-black/50 px-4 py-1 rounded-full border border-violet-primary/30">Understanding your garment...</span>
+                        <span className="text-sm font-display tracking-widest text-violet-light bg-black/50 px-4 py-1 rounded-full border border-violet-primary/30 text-center">Analyzing your garment...</span>
                       </div>
                     </div>
                   </>
@@ -115,17 +209,15 @@ export default function AddClothingPage() {
                     animate={{ opacity: 1 }}
                     className="absolute inset-0 border-4 border-violet-primary rounded-2xl pointer-events-none"
                   >
-                    {/* Detection Points */}
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 }} className="absolute top-[30%] left-[40%] w-3 h-3 bg-violet-primary rounded-full box-glow" />
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4 }} className="absolute top-[60%] left-[50%] w-3 h-3 bg-violet-primary rounded-full box-glow" />
                   </motion.div>
                 )}
               </div>
 
-              {/* Results Panel */}
               <div className="w-full max-w-sm">
                 <AnimatePresence>
-                  {scanComplete ? (
+                  {scanComplete && scannedData ? (
                     <motion.div
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -136,41 +228,89 @@ export default function AddClothingPage() {
                         <span className="text-sm tracking-wider uppercase font-medium">Scan Complete</span>
                       </div>
                       
-                      <h3 className="text-2xl font-medium mb-6">Blue Denim Jacket</h3>
-                      
-                      <motion.div 
-                        className="space-y-4 mb-8"
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                      >
-                        <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-white/50">Category</span>
-                          <span className="font-medium">Jacket</span>
-                        </motion.div>
-                        <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-white/50">Color</span>
-                          <span className="font-medium flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span> Blue
-                          </span>
-                        </motion.div>
-                        <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-white/50">Season</span>
-                          <span className="font-medium">Spring / Fall</span>
-                        </motion.div>
-                        <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-white/50">Style</span>
-                          <span className="font-medium">Casual</span>
-                        </motion.div>
-                        <motion.div variants={itemVariants} className="flex justify-between">
-                          <span className="text-white/50">Confidence</span>
-                          <span className="font-medium text-violet-light">96%</span>
-                        </motion.div>
-                      </motion.div>
+                      {isEditing ? (
+                        <div className="space-y-4 mb-6">
+                          <input 
+                            type="text" 
+                            value={scannedData.name}
+                            onChange={(e) => setScannedData({...scannedData, name: e.target.value})}
+                            className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-violet-primary"
+                          />
+                          <select 
+                            value={scannedData.category}
+                            onChange={(e) => setScannedData({...scannedData, category: e.target.value})}
+                            className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-violet-primary"
+                          >
+                            <option value="Tops">Tops</option>
+                            <option value="Bottoms">Bottoms</option>
+                            <option value="Outerwear">Outerwear</option>
+                            <option value="Shoes">Shoes</option>
+                            <option value="Accessories">Accessories</option>
+                            <option value="Dresses">Dresses</option>
+                          </select>
+                          <input 
+                            type="text" 
+                            placeholder="Color"
+                            value={scannedData.color}
+                            onChange={(e) => setScannedData({...scannedData, color: e.target.value})}
+                            className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-violet-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="Subcategory"
+                            value={scannedData.subcategory}
+                            onChange={(e) => setScannedData({...scannedData, subcategory: e.target.value})}
+                            className="w-full bg-charcoal border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-violet-primary"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="text-2xl font-medium mb-6">{scannedData.name}</h3>
+                          
+                          <motion.div 
+                            className="space-y-4 mb-8"
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="show"
+                          >
+                            <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
+                              <span className="text-white/50">Category</span>
+                              <span className="font-medium">{scannedData.category}</span>
+                            </motion.div>
+                            <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
+                              <span className="text-white/50">Color</span>
+                              <span className="font-medium flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-violet-primary shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span> {scannedData.color}
+                              </span>
+                            </motion.div>
+                            <motion.div variants={itemVariants} className="flex justify-between border-b border-white/5 pb-2">
+                              <span className="text-white/50">Subcategory</span>
+                              <span className="font-medium">{scannedData.subcategory || 'None'}</span>
+                            </motion.div>
+                            <motion.div variants={itemVariants} className="flex justify-between">
+                              <span className="text-white/50">Style tag</span>
+                              <span className="font-medium text-violet-light">{scannedData.style_tag}</span>
+                            </motion.div>
+                          </motion.div>
+                        </>
+                      )}
 
                       <div className="flex flex-col gap-3">
-                        <Button className="w-full" icon={<ArrowRight className="w-4 h-4"/>}>Looks Right</Button>
-                        <Button variant="ghost" className="w-full">Edit Details</Button>
+                        <Button 
+                          className="w-full flex items-center justify-center gap-2" 
+                          onClick={handleSave}
+                          disabled={isSaving}
+                          icon={isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4"/>}
+                        >
+                          {isSaving ? 'Saving...' : 'Looks Right'}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          className="w-full"
+                          onClick={() => setIsEditing(!isEditing)}
+                        >
+                          {isEditing ? 'Done Editing' : 'Edit Details'}
+                        </Button>
                       </div>
                     </motion.div>
                   ) : (
